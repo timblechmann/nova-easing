@@ -1,0 +1,36 @@
+[package]
+name = "nova-easing"
+version = "0.1.0"
+edition = "2024"
+authors = ["Tim Blechmann <tim@klingt.org>"]
+license = "MIT"
+description = "A collection of generic easing functions, supporting portable SIMD."
+repository = "https://github.com/timblechmann/nova-easing.git"
+readme = "README.md"
+keywords = ["easing", "interpolation", "animation", "simd", "portable-simd"]
+homepage = "https://github.com/timblechmann/nova-easing"
+documentation = "https://docs.rs/nova-easing"
+
+
+[features]
+default = []
+nightly = []
+demo = ["plotters"]
+
+[dependencies]
+plotters = { version = "0.3", optional = true }
+
+[[bench]]
+name = "easing_bench"
+harness = false
+path = "benches/bench.rs"
+
+[[bin]]
+name = "demo"
+path = "src/bin/demo.rs"
+required-features = ["nightly", "demo"]
+
+[dev-dependencies]
+approx = "0.5.1"
+paste = "1.0"
+criterion = { version = "0.7", features = ["html_reports"] }

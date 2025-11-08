@@ -1,0 +1,80 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig-dev
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: clippy, rustfmt
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Check lints
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+        - stable
+        - nightly
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.toolchain }}
+
+    - name: Cache Cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.toolchain }}-
+
+    - name: Build (stable)
+      if: matrix.toolchain == 'stable'
+      run: cargo build --verbose --no-default-features
+
+    - name: Test (stable)
+      if: matrix.toolchain == 'stable'
+      run: cargo test --verbose --no-default-features
+
+    - name: Build (nightly)
+      if: matrix.toolchain == 'nightly'
+      run: cargo build --verbose --features nightly
+
+    - name: Test (nightly)
+      if: matrix.toolchain == 'nightly'
+      run: cargo test --verbose --features nightly

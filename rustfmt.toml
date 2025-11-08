@@ -1,0 +1,4 @@
+edition = "2024"
+enum_discrim_align_threshold = 20
+force_multiline_blocks = true
+blank_lines_upper_bound = 2
