@@ -116,5 +116,108 @@ fn main() {
     generate_plots!(ease_out_elastic);
     generate_plots!(ease_in_out_elastic);
 
+    // Generate plots for ease_in_curve with different curve factors
+    let curve_factors = [-4.0, -1.0, 0.0, 1.0, 4.0];
+    for &curve in &curve_factors {
+        let samples = generate_samples_f32(|x| EasingArgument::ease_in_curve(x, curve));
+        let filename = format!(
+            "demo_plots/f32/ease_in_curve_{}.png",
+            if curve < 0.0 {
+                format!("neg{}", curve.abs() as i32)
+            } else {
+                curve.to_string()
+            }
+        );
+        plot_samples(&samples, &filename).unwrap();
+        println!("Generated plot for ease_in_curve f32 with curve {}", curve);
+
+        #[cfg(feature = "nightly")]
+        {
+            let samples = generate_samples_f32x4(|x| EasingArgument::ease_in_curve(x, curve));
+            let filename = format!(
+                "demo_plots/f32x4/ease_in_curve_{}.png",
+                if curve < 0.0 {
+                    format!("neg{}", curve.abs() as i32)
+                } else {
+                    curve.to_string()
+                }
+            );
+            plot_samples(&samples, &filename).unwrap();
+            println!(
+                "Generated plot for ease_in_curve f32x4 with curve {}",
+                curve
+            );
+        }
+    }
+
+    // Generate plots for ease_out_curve with different curve factors
+    for &curve in &curve_factors {
+        let samples = generate_samples_f32(|x| EasingArgument::ease_out_curve(x, curve));
+        let filename = format!(
+            "demo_plots/f32/ease_out_curve_{}.png",
+            if curve < 0.0 {
+                format!("neg{}", curve.abs() as i32)
+            } else {
+                curve.to_string()
+            }
+        );
+        plot_samples(&samples, &filename).unwrap();
+        println!("Generated plot for ease_out_curve f32 with curve {}", curve);
+
+        #[cfg(feature = "nightly")]
+        {
+            let samples = generate_samples_f32x4(|x| EasingArgument::ease_out_curve(x, curve));
+            let filename = format!(
+                "demo_plots/f32x4/ease_out_curve_{}.png",
+                if curve < 0.0 {
+                    format!("neg{}", curve.abs() as i32)
+                } else {
+                    curve.to_string()
+                }
+            );
+            plot_samples(&samples, &filename).unwrap();
+            println!(
+                "Generated plot for ease_out_curve f32x4 with curve {}",
+                curve
+            );
+        }
+    }
+
+    // Generate plots for ease_in_out_curve with different curve factors
+    for &curve in &curve_factors {
+        let samples = generate_samples_f32(|x| EasingArgument::ease_in_out_curve(x, curve));
+        let filename = format!(
+            "demo_plots/f32/ease_in_out_curve_{}.png",
+            if curve < 0.0 {
+                format!("neg{}", curve.abs() as i32)
+            } else {
+                curve.to_string()
+            }
+        );
+        plot_samples(&samples, &filename).unwrap();
+        println!(
+            "Generated plot for ease_in_out_curve f32 with curve {}",
+            curve
+        );
+
+        #[cfg(feature = "nightly")]
+        {
+            let samples = generate_samples_f32x4(|x| EasingArgument::ease_in_out_curve(x, curve));
+            let filename = format!(
+                "demo_plots/f32x4/ease_in_out_curve_{}.png",
+                if curve < 0.0 {
+                    format!("neg{}", curve.abs() as i32)
+                } else {
+                    curve.to_string()
+                }
+            );
+            plot_samples(&samples, &filename).unwrap();
+            println!(
+                "Generated plot for ease_in_out_curve f32x4 with curve {}",
+                curve
+            );
+        }
+    }
+
     println!("All plots generated in demo_plots/");
 }

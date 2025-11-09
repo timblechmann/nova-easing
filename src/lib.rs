@@ -13,11 +13,69 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 
 #[cfg(feature = "nightly")]
 use std::simd::StdFloat;
+#[cfg(feature = "nightly")]
+use std::simd::num::SimdFloat;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 mod internal {
     pub trait Sealed {}
+
+    pub trait CurveParam<T>: Sealed + Copy {
+        fn to_curve(self) -> T;
+    }
+}
+
+impl internal::CurveParam<f32> for f32 {
+    fn to_curve(self) -> f32 {
+        self
+    }
+}
+
+impl internal::CurveParam<f64> for f64 {
+    fn to_curve(self) -> f64 {
+        self
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<const N: usize> internal::CurveParam<Simd<f32, N>> for f32
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    fn to_curve(self) -> Simd<f32, N> {
+        Simd::splat(self)
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<const N: usize> internal::CurveParam<Simd<f32, N>> for Simd<f32, N>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    fn to_curve(self) -> Simd<f32, N> {
+        self
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<const N: usize> internal::CurveParam<Simd<f64, N>> for f64
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    fn to_curve(self) -> Simd<f64, N> {
+        Simd::splat(self)
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<const N: usize> internal::CurveParam<Simd<f64, N>> for Simd<f64, N>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    fn to_curve(self) -> Simd<f64, N> {
+        self
+    }
 }
 
 /// A trait providing easing functions for smooth interpolation.
@@ -371,21 +429,88 @@ pub trait EasingArgument: internal::Sealed + Sized + Copy {
 
         one + c3 * (self - one).powi(3) + c1 * (self - one).powi(2)
     }
+
+    /// Applies custom exponential easing in with a curve parameter.
+    ///
+    /// Accelerates from slow to fast using exponential growth controlled by the `curve` parameter.
+    /// - `curve > 0`: Convex curve, steeper acceleration (e.g., `curve = 1.0` for moderate, `curve = 4.0` for sharp).
+    /// - `curve < 0`: Concave curve, gentler acceleration (e.g., `curve = -1.0` for soft, `curve = -4.0` for very gradual).
+    /// - `curve ≈ 0`: Approximates linear easing.
+    ///
+    /// The `curve` parameter can be a scalar or SIMD vector matching the easing argument type.
+    /// Inspired by SuperCollider's `Env` curve parameter for envelope shaping.
+    /// See [SuperCollider Env documentation](https://doc.sccode.org/Classes/Env.html) for more on curve values.
+    #[allow(private_bounds)]
+    fn ease_in_curve<C>(self, curve: C) -> Self
+    where
+        Self: EasingImplHelper,
+        C: internal::CurveParam<Self>,
+    {
+        <Self as EasingImplHelper>::ease_in_curve(self, curve)
+    }
+
+    /// Applies custom exponential easing out with a curve parameter.
+    ///
+    /// Decelerates from fast to slow using exponential decay controlled by the `curve` parameter.
+    /// - `curve > 0`: Convex curve, steeper deceleration.
+    /// - `curve < 0`: Concave curve, gentler deceleration.
+    /// - `curve ≈ 0`: Approximates linear easing.
+    ///
+    /// The `curve` parameter can be a scalar or SIMD vector matching the easing argument type.
+    /// Mirrors `ease_in_curve` but in reverse. Inspired by SuperCollider's `Env` curve parameter.
+    /// See [SuperCollider Env documentation](https://doc.sccode.org/Classes/Env.html).
+    #[allow(private_bounds)]
+    fn ease_out_curve<C>(self, curve: C) -> Self
+    where
+        Self: EasingImplHelper,
+        C: internal::CurveParam<Self>,
+    {
+        <Self as EasingImplHelper>::ease_out_curve(self, curve)
+    }
+
+    /// Applies custom exponential easing in-out with a curve parameter.
+    ///
+    /// Accelerates then decelerates using exponential transitions controlled by the `curve` parameter.
+    /// - `curve > 0`: Sharper acceleration and deceleration.
+    /// - `curve < 0`: Softer transitions.
+    /// - `curve ≈ 0`: Approximates linear easing.
+    ///
+    /// The `curve` parameter can be a scalar or SIMD vector matching the easing argument type.
+    /// Combines `ease_in_curve` and `ease_out_curve` for smooth bidirectional transitions.
+    /// Inspired by SuperCollider's `Env` curve parameter for envelope shaping.
+    /// See [SuperCollider Env documentation](https://doc.sccode.org/Classes/Env.html).
+    #[allow(private_bounds)]
+    fn ease_in_out_curve<C>(self, curve: C) -> Self
+    where
+        Self: EasingImplHelper,
+        C: internal::CurveParam<Self>,
+    {
+        <Self as EasingImplHelper>::ease_in_out_curve(self, curve)
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 trait EasingImplHelper:
-    Sub<Self, Output = Self> + Add<Self, Output = Self> + Mul<Self, Output = Self> + Sized + Copy
+    Sub<Self, Output = Self>
+    + Add<Self, Output = Self>
+    + Mul<Self, Output = Self>
+    + Div<Self, Output = Self>
+    + Sized
+    + Copy
 {
     fn from_f32(arg: f32) -> Self;
     fn sin(self) -> Self;
     fn cos(self) -> Self;
     fn powi(self, n: i32) -> Self;
+    #[allow(unused)]
+    fn powf(self, other: Self) -> Self;
     fn double(self) -> Self {
         self + self
     }
     fn sqrt(self) -> Self;
+    #[allow(unused)]
+    fn exp(self) -> Self;
 
     fn ease_in_pow(self, n: i32) -> Self {
         self.powi(n)
@@ -410,6 +535,16 @@ trait EasingImplHelper:
     fn ease_out_elastic(self) -> Self;
     fn ease_in_out_elastic(self) -> Self;
     fn ease_in_out_circ(self) -> Self;
+
+    fn ease_in_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>;
+    fn ease_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>;
+    fn ease_in_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,8 +567,14 @@ macro_rules! impl_scalar_easing_helper {
             fn powi(self, n: i32) -> Self {
                 self.powi(n)
             }
+            fn powf(self, other: Self) -> Self {
+                self.powf(other)
+            }
             fn sqrt(self) -> Self {
                 self.sqrt()
+            }
+            fn exp(self) -> Self {
+                self.exp()
             }
 
             fn ease_in_out_quad(self) -> Self {
@@ -599,6 +740,43 @@ macro_rules! impl_scalar_easing_helper {
                     ((one - (two - double).powi(2)).sqrt() + one) * half
                 }
             }
+
+            fn ease_in_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let c = curve.to_curve();
+                if c.abs() < 0.001 {
+                    self
+                } else {
+                    let grow = c.exp();
+                    let one = Self::from_f32(1.0);
+                    let a = one / (one - grow);
+                    let b = a;
+                    b - (a * grow.powf(self))
+                }
+            }
+
+            fn ease_out_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let one = Self::from_f32(1.0);
+                one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
+            }
+
+            fn ease_in_out_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let half = Self::from_f32(0.5);
+                if self < half {
+                    <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half
+                } else {
+                    half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve)
+                        * half
+                }
+            }
         }
     };
 }
@@ -643,8 +821,15 @@ macro_rules! impl_simd_easing_helper {
                 <Self as StdFloat>::cos(self)
             }
 
+            fn powf(self, other: Self) -> Self {
+                <Self as StdFloat>::exp(other * <Self as StdFloat>::ln(self))
+            }
+
             fn sqrt(self) -> Self {
                 <Self as StdFloat>::sqrt(self)
+            }
+            fn exp(self) -> Self {
+                <Self as StdFloat>::exp(self)
             }
 
             fn ease_in_out_quad(self) -> Self {
@@ -862,6 +1047,39 @@ macro_rules! impl_simd_easing_helper {
                 let upper_half = (StdFloat::sqrt(one - (two - double).powi(2)) + one) * half;
                 mask.select(lower_half, upper_half)
             }
+
+            fn ease_in_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let c = curve.to_curve();
+                let abs_curve = SimdFloat::abs(c);
+                let mask = abs_curve.simd_lt(Self::from_f32(0.001));
+                let grow = <Self as StdFloat>::exp(c);
+                let a = Self::from_f32(1.0) / (Self::from_f32(1.0) - grow);
+                let b = a;
+                let normal = b - (a * grow.powf(self));
+                mask.select(self, normal)
+            }
+
+            fn ease_out_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let one = Self::from_f32(1.0);
+                one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
+            }
+
+            fn ease_in_out_curve<C>(self, curve: C) -> Self
+            where
+                C: internal::CurveParam<Self>,
+            {
+                let half = Self::from_f32(0.5);
+                let mask = self.simd_lt(half);
+                let lower_half = <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half;
+                let upper_half = half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve) * half;
+                mask.select(lower_half, upper_half)
+            }
         }
     };
 }
@@ -877,6 +1095,8 @@ impl_simd_easing_helper!(f64);
 #[cfg(test)]
 mod tests {
     use super::EasingArgument;
+    #[cfg(feature = "nightly")]
+    use std::simd::{Simd, f32x4};
 
     #[cfg(feature = "nightly")]
     mod comparison_tests {
@@ -930,6 +1150,40 @@ mod tests {
         generate_comparison_tests!(ease_in_elastic);
         generate_comparison_tests!(ease_out_elastic);
         generate_comparison_tests!(ease_in_out_elastic);
+
+        #[test]
+        fn ease_in_curve_f32_vs_f32x4() {
+            use super::EasingArgument;
+            let points = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+            for &x in &points {
+                let scalar = EasingArgument::ease_in_curve(x, 1.0f32);
+                let vector = EasingArgument::ease_in_curve(core::simd::f32x4::splat(x), 1.0f32)[0];
+                assert_relative_eq!(scalar, vector, epsilon = 1e-6);
+            }
+        }
+
+        #[test]
+        fn ease_out_curve_f32_vs_f32x4() {
+            use super::EasingArgument;
+            let points = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+            for &x in &points {
+                let scalar = EasingArgument::ease_out_curve(x, 1.0f32);
+                let vector = EasingArgument::ease_out_curve(core::simd::f32x4::splat(x), 1.0f32)[0];
+                assert_relative_eq!(scalar, vector, epsilon = 1e-6);
+            }
+        }
+
+        #[test]
+        fn ease_in_out_curve_f32_vs_f32x4() {
+            use super::EasingArgument;
+            let points = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+            for &x in &points {
+                let scalar = EasingArgument::ease_in_out_curve(x, 1.0f32);
+                let vector =
+                    EasingArgument::ease_in_out_curve(core::simd::f32x4::splat(x), 1.0f32)[0];
+                assert_relative_eq!(scalar, vector, epsilon = 1e-6);
+            }
+        }
     }
 
     mod boundary_and_symmetry_tests {
@@ -1015,6 +1269,21 @@ mod tests {
                         assert_relative_eq!(one.ease_out_elastic(), one, epsilon = $epsilon);
                         assert_relative_eq!(zero.ease_in_out_elastic(), zero, epsilon = $epsilon);
                         assert_relative_eq!(one.ease_in_out_elastic(), one, epsilon = $epsilon);
+
+                        assert_relative_eq!(zero.ease_in_curve(1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_in_curve(1.0), one, epsilon = $epsilon);
+                        assert_relative_eq!(zero.ease_in_curve(-1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_in_curve(-1.0), one, epsilon = $epsilon);
+
+                        assert_relative_eq!(zero.ease_out_curve(1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_out_curve(1.0), one, epsilon = $epsilon);
+                        assert_relative_eq!(zero.ease_out_curve(-1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_out_curve(-1.0), one, epsilon = $epsilon);
+
+                        assert_relative_eq!(zero.ease_in_out_curve(1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_in_out_curve(1.0), one, epsilon = $epsilon);
+                        assert_relative_eq!(zero.ease_in_out_curve(-1.0), zero, epsilon = $epsilon);
+                        assert_relative_eq!(one.ease_in_out_curve(-1.0), one, epsilon = $epsilon);
                      }
                 }
             };
@@ -1042,6 +1311,7 @@ mod tests {
                             assert_relative_eq!(t_val.ease_out_bounce(), one - one_minus_t.ease_in_bounce(), epsilon = $epsilon);
                             assert_relative_eq!(t_val.ease_out_expo(), one - one_minus_t.ease_in_expo(), epsilon = $epsilon);
                             assert_relative_eq!(t_val.ease_out_elastic(), one - one_minus_t.ease_in_elastic(), epsilon = $epsilon);
+                            assert_relative_eq!(t_val.ease_out_curve(1.0), one - one_minus_t.ease_in_curve(1.0), epsilon = $epsilon);
                         }
                     }
                 }
@@ -1070,6 +1340,7 @@ mod tests {
                             assert_relative_eq!(t_val.ease_in_out_bounce(), one - one_minus_t.ease_in_out_bounce(), epsilon = $epsilon);
                             assert_relative_eq!(t_val.ease_in_out_expo(), one - one_minus_t.ease_in_out_expo(), epsilon = $epsilon);
                             assert_relative_eq!(t_val.ease_in_out_elastic(), one - one_minus_t.ease_in_out_elastic(), epsilon = $epsilon);
+                            assert_relative_eq!(t_val.ease_in_out_curve(1.0), one - one_minus_t.ease_in_out_curve(1.0), epsilon = $epsilon);
                         }
                     }
                 }
@@ -1085,5 +1356,20 @@ mod tests {
         generate_boundary_tests!(f64, 1e-7);
         generate_mirror_symmetry_tests!(f64, 1e-7);
         generate_in_out_symmetry_tests!(f64, 1e-7);
+    }
+
+    #[cfg(feature = "nightly")]
+    #[test]
+    fn test_mixed_arguments() {
+        let arg: f32x4 = Simd::splat(0.5);
+        {
+            let curve = 1.0f32;
+            arg.ease_in_out_curve(curve);
+        }
+
+        {
+            let curve = f32x4::splat(1.0);
+            arg.ease_in_out_curve(curve);
+        }
     }
 }
