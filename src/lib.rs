@@ -4,25 +4,38 @@
 #![cfg_attr(feature = "nightly", feature(portable_simd))]
 
 use core::ops::*;
+use num_traits::{Float, FromPrimitive};
 
 #[cfg(feature = "nightly")]
-use core::simd::{LaneCount, Simd, SupportedLaneCount};
+use core::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
 #[cfg(feature = "nightly")]
 use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 
 #[cfg(feature = "nightly")]
-use std::simd::StdFloat;
-#[cfg(feature = "nightly")]
 use std::simd::num::SimdFloat;
 
+#[cfg(feature = "nightly")]
+use std::simd::StdFloat;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Marker trait for scalar float types we support.
+trait Scalar: Float + FromPrimitive {}
+impl Scalar for f32 {}
+impl Scalar for f64 {}
 
 mod internal {
     pub trait Sealed {}
 
     pub trait CurveParam<T>: Sealed + Copy {
         fn to_curve(self) -> T;
+    }
+
+    #[cfg(feature = "nightly")]
+    pub trait SimdScalar: core::simd::SimdElement + Copy {
+        fn from_f32_scalar(val: f32) -> Self;
+        fn ln_2() -> Self;
     }
 }
 
@@ -39,9 +52,30 @@ impl internal::CurveParam<f64> for f64 {
 }
 
 #[cfg(feature = "nightly")]
+impl internal::SimdScalar for f32 {
+    fn from_f32_scalar(val: f32) -> Self {
+        val
+    }
+    fn ln_2() -> Self {
+        2.0f32.ln()
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl internal::SimdScalar for f64 {
+    fn from_f32_scalar(val: f32) -> Self {
+        val as f64
+    }
+    fn ln_2() -> Self {
+        2.0f64.ln()
+    }
+}
+
+#[cfg(feature = "nightly")]
 impl<const N: usize> internal::CurveParam<Simd<f32, N>> for f32
 where
     LaneCount<N>: SupportedLaneCount,
+    Simd<f32, N>: EasingImplHelper,
 {
     fn to_curve(self) -> Simd<f32, N> {
         Simd::splat(self)
@@ -52,6 +86,7 @@ where
 impl<const N: usize> internal::CurveParam<Simd<f32, N>> for Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
+    Simd<f32, N>: EasingImplHelper,
 {
     fn to_curve(self) -> Simd<f32, N> {
         self
@@ -62,6 +97,7 @@ where
 impl<const N: usize> internal::CurveParam<Simd<f64, N>> for f64
 where
     LaneCount<N>: SupportedLaneCount,
+    Simd<f64, N>: EasingImplHelper,
 {
     fn to_curve(self) -> Simd<f64, N> {
         Simd::splat(self)
@@ -72,6 +108,7 @@ where
 impl<const N: usize> internal::CurveParam<Simd<f64, N>> for Simd<f64, N>
 where
     LaneCount<N>: SupportedLaneCount,
+    Simd<f64, N>: EasingImplHelper,
 {
     fn to_curve(self) -> Simd<f64, N> {
         self
@@ -551,560 +588,592 @@ trait EasingImplHelper:
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Scalar types
-macro_rules! impl_scalar_easing_helper {
-    ($t:ty) => {
-        impl internal::Sealed for $t {}
-        impl EasingArgument for $t {}
-        impl EasingImplHelper for $t {
-            fn from_f32(arg: f32) -> Self {
-                arg as $t
-            }
-            fn sin(self) -> Self {
-                self.sin()
-            }
-            fn cos(self) -> Self {
-                self.cos()
-            }
-            fn powi(self, n: i32) -> Self {
-                self.powi(n)
-            }
-            fn powf(self, other: Self) -> Self {
-                self.powf(other)
-            }
-            fn sqrt(self) -> Self {
-                self.sqrt()
-            }
-            fn exp(self) -> Self {
-                self.exp()
-            }
-            fn mul_add(self, a: Self, b: Self) -> Self {
-                self.mul_add(a, b)
-            }
+impl<T: EasingImplHelper> internal::Sealed for T {}
+impl<T: EasingImplHelper> EasingArgument for T {}
 
-            fn ease_in_out_quad(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let one = Self::from_f32(1.0);
-                let two = Self::from_f32(2.0);
-                if self < half {
-                    two * self.powi(2)
-                } else {
-                    one - ((two * self - two).powi(2) * half)
-                }
-            }
-            fn ease_in_out_cubic(self) -> Self {
-                let half = Self::from_f32(0.5);
-                if self < half {
-                    let cubed = self.powi(3);
-                    let doubled = cubed.double();
-                    doubled + doubled
-                } else {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(3) * half
-                }
-            }
-            fn ease_in_out_quart(self) -> Self {
-                let half = Self::from_f32(0.5);
-                if self < half {
-                    Self::from_f32(8.0) * self.powi(4)
-                } else {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(4) * half
-                }
-            }
-            fn ease_in_out_quint(self) -> Self {
-                let half = Self::from_f32(0.5);
-                if self < half {
-                    Self::from_f32(16.0) * self.powi(5)
-                } else {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(5) * half
-                }
-            }
-            fn ease_in_out_back(self) -> Self {
-                let c2 = Self::from_f32(1.70158 * 1.525);
-                let half = Self::from_f32(0.5);
-                let two = Self::from_f32(2.0);
-                if self < half {
-                    let two_x = self.double();
-                    let pow_two_x_2 = two_x.powi(2);
-                    let inner = (c2 + Self::from_f32(1.0)).mul_add(two_x, -c2);
-                    pow_two_x_2 * inner * half
-                } else {
-                    let two_x_minus_2 = self.double() - two;
-                    let pow_two_x_minus_2_2 = two_x_minus_2.powi(2);
-                    let inner = (c2 + Self::from_f32(1.0)).mul_add(self.double() - two, c2);
-                    pow_two_x_minus_2_2.mul_add(inner, two) * half
-                }
-            }
-            fn ease_out_bounce(self) -> Self {
-                let n1 = Self::from_f32(7.5625);
-                let one_over_d1 = Self::from_f32(1.0 / 2.75);
-                let two_over_d1 = Self::from_f32(2.0 / 2.75);
-                let two_point_five_over_d1 = Self::from_f32(2.5 / 2.75);
-                if self < one_over_d1 {
-                    n1 * self * self
-                } else if self < two_over_d1 {
-                    let adjusted = self - Self::from_f32(1.5 / 2.75);
-                    (adjusted * adjusted).mul_add(n1, Self::from_f32(0.75))
-                } else if self < two_point_five_over_d1 {
-                    let adjusted = self - Self::from_f32(2.25 / 2.75);
-                    (adjusted * adjusted).mul_add(n1, Self::from_f32(0.9375))
-                } else {
-                    let adjusted = self - Self::from_f32(2.625 / 2.75);
-                    (adjusted * adjusted).mul_add(n1, Self::from_f32(0.984375))
-                }
-            }
-            fn ease_in_out_bounce(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let one = Self::from_f32(1.0);
-                if self < half {
-                    (one - EasingArgument::ease_out_bounce(one - self.double())) * half
-                } else {
-                    (one + EasingArgument::ease_out_bounce(self.double() - one)) * half
-                }
-            }
-            fn ease_in_expo(self) -> Self {
-                if self == Self::from_f32(0.0) {
-                    Self::from_f32(0.0)
-                } else {
-                    Self::from_f32(2.0).powf(Self::from_f32(10.0).mul_add(self, -10.0))
-                }
-            }
-            fn ease_out_expo(self) -> Self {
-                if self == Self::from_f32(1.0) {
-                    Self::from_f32(1.0)
-                } else {
-                    Self::from_f32(2.0)
-                        .powf(Self::from_f32(-10.0) * self)
-                        .mul_add(Self::from_f32(-1.0), Self::from_f32(1.0))
-                }
-            }
-            fn ease_in_out_expo(self) -> Self {
-                if self == Self::from_f32(0.0) {
-                    Self::from_f32(0.0)
-                } else if self == Self::from_f32(1.0) {
-                    Self::from_f32(1.0)
-                } else if self < Self::from_f32(0.5) {
-                    Self::from_f32(2.0)
-                        .powf(Self::from_f32(20.0).mul_add(self, -10.0))
-                        .mul_add(Self::from_f32(0.5), 0.0)
-                } else {
-                    Self::from_f32(2.0)
-                        .powf(Self::from_f32(-20.0).mul_add(self, 10.0))
-                        .mul_add(Self::from_f32(-0.5), Self::from_f32(1.0))
-                }
-            }
-            fn ease_in_elastic(self) -> Self {
-                if self == Self::from_f32(0.0) {
-                    Self::from_f32(0.0)
-                } else if self == Self::from_f32(1.0) {
-                    Self::from_f32(1.0)
-                } else {
-                    let c4 = Self::from_f32(2.094_395_2);
-                    -Self::from_f32(2.0).powf(10.0 * self - 10.0)
-                        * (self.mul_add(Self::from_f32(10.0), Self::from_f32(-10.75)) * c4).sin()
-                }
-            }
-            fn ease_out_elastic(self) -> Self {
-                if self == Self::from_f32(0.0) {
-                    Self::from_f32(0.0)
-                } else if self == Self::from_f32(1.0) {
-                    Self::from_f32(1.0)
-                } else {
-                    let c4 = Self::from_f32(2.094_395_2);
-                    Self::from_f32(2.0).powf(-10.0 * self).mul_add(
-                        (self.mul_add(Self::from_f32(10.0), Self::from_f32(-0.75)) * c4).sin(),
-                        Self::from_f32(1.0),
-                    )
-                }
-            }
-            fn ease_in_out_elastic(self) -> Self {
-                if self == Self::from_f32(0.0) {
-                    Self::from_f32(0.0)
-                } else if self == Self::from_f32(1.0) {
-                    Self::from_f32(1.0)
-                } else if self < Self::from_f32(0.5) {
-                    let c5 = Self::from_f32(1.396_263_4);
-                    -Self::from_f32(2.0).powf(20.0 * self - 10.0)
-                        * (self.mul_add(Self::from_f32(20.0), Self::from_f32(-11.125)) * c5).sin()
-                        * Self::from_f32(0.5)
-                } else {
-                    let c5 = Self::from_f32(1.396_263_4);
-                    Self::from_f32(2.0).powf(-20.0 * self + 10.0).mul_add(
-                        (self.mul_add(Self::from_f32(20.0), Self::from_f32(-11.125)) * c5).sin()
-                            * Self::from_f32(0.5),
-                        Self::from_f32(1.0),
-                    )
-                }
-            }
-            fn ease_in_out_circ(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let one = Self::from_f32(1.0);
-                let two = Self::from_f32(2.0);
-                let double = self.double();
-                if self < half {
-                    (one - (one - double.powi(2)).sqrt()) * half
-                } else {
-                    ((one - (two - double).powi(2)).sqrt() + one) * half
-                }
-            }
+impl<T> EasingImplHelper for T
+where
+    T: Scalar,
+{
+    fn from_f32(arg: f32) -> Self {
+        T::from(arg).unwrap()
+    }
+    fn sin(self) -> Self {
+        self.sin()
+    }
+    fn cos(self) -> Self {
+        self.cos()
+    }
+    fn powi(self, n: i32) -> Self {
+        self.powi(n)
+    }
+    fn powf(self, other: Self) -> Self {
+        self.powf(other)
+    }
+    fn sqrt(self) -> Self {
+        self.sqrt()
+    }
+    fn exp(self) -> Self {
+        self.exp()
+    }
+    fn mul_add(self, a: Self, b: Self) -> Self {
+        self.mul_add(a, b)
+    }
 
-            fn ease_in_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let c = curve.to_curve();
-                if c.abs() < 0.001 {
-                    self
-                } else {
-                    let grow = c.exp();
-                    let one = Self::from_f32(1.0);
-                    let a = one / (one - grow);
-                    a - (a * grow.powf(self))
-                }
-            }
-
-            fn ease_out_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let one = Self::from_f32(1.0);
-                one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
-            }
-
-            fn ease_in_out_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let half = Self::from_f32(0.5);
-                if self < half {
-                    <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half
-                } else {
-                    half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve)
-                        * half
-                }
-            }
+    fn ease_in_out_quad(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        let one = T::one();
+        let two = T::from(2.0).unwrap();
+        if self < half {
+            two * self.powi(2)
+        } else {
+            one - ((two * self - two).powi(2) * half)
         }
-    };
-}
+    }
+    fn ease_in_out_cubic(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        if self < half {
+            let cubed = self.powi(3);
+            let doubled = cubed.double();
+            doubled + doubled
+        } else {
+            let one = T::one();
+            let two = T::from(2.0).unwrap();
+            one - (two - self.double()).powi(3) * half
+        }
+    }
+    fn ease_in_out_quart(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        if self < half {
+            T::from(8.0).unwrap() * self.powi(4)
+        } else {
+            let one = T::one();
+            let two = T::from(2.0).unwrap();
+            one - (two - self.double()).powi(4) * half
+        }
+    }
+    fn ease_in_out_quint(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        if self < half {
+            T::from(16.0).unwrap() * self.powi(5)
+        } else {
+            let one = T::one();
+            let two = T::from(2.0).unwrap();
+            one - (two - self.double()).powi(5) * half
+        }
+    }
+    fn ease_in_out_back(self) -> Self {
+        let c2 = T::from(1.70158 * 1.525).unwrap();
+        let half = T::from(0.5).unwrap();
+        let two = T::from(2.0).unwrap();
+        if self < half {
+            let two_x = self.double();
+            let pow_two_x_2 = two_x.powi(2);
+            let inner = (c2 + T::one()).mul_add(two_x, -c2);
+            pow_two_x_2 * inner * half
+        } else {
+            let two_x_minus_2 = self.double() - two;
+            let pow_two_x_minus_2_2 = two_x_minus_2.powi(2);
+            let inner = (c2 + T::one()).mul_add(self.double() - two, c2);
+            pow_two_x_minus_2_2.mul_add(inner, two) * half
+        }
+    }
+    fn ease_out_bounce(self) -> Self {
+        let n1 = T::from(7.5625).unwrap();
+        let one_over_d1 = T::from(1.0 / 2.75).unwrap();
+        let two_over_d1 = T::from(2.0 / 2.75).unwrap();
+        let two_point_five_over_d1 = T::from(2.5 / 2.75).unwrap();
+        if self < one_over_d1 {
+            n1 * self * self
+        } else if self < two_over_d1 {
+            let adjusted = self - T::from(1.5 / 2.75).unwrap();
+            (adjusted * adjusted).mul_add(n1, T::from(0.75).unwrap())
+        } else if self < two_point_five_over_d1 {
+            let adjusted = self - T::from(2.25 / 2.75).unwrap();
+            (adjusted * adjusted).mul_add(n1, T::from(0.9375).unwrap())
+        } else {
+            let adjusted = self - T::from(2.625 / 2.75).unwrap();
+            (adjusted * adjusted).mul_add(n1, T::from(0.984375).unwrap())
+        }
+    }
+    fn ease_in_out_bounce(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        let one = T::one();
+        if self < half {
+            (one - EasingArgument::ease_out_bounce(one - self.double())) * half
+        } else {
+            (one + EasingArgument::ease_out_bounce(self.double() - one)) * half
+        }
+    }
+    fn ease_in_expo(self) -> Self {
+        if self == T::zero() {
+            T::zero()
+        } else {
+            T::from(2.0).unwrap().powf(
+                T::from(10.0)
+                    .unwrap()
+                    .mul_add(self, -T::from(10.0).unwrap()),
+            )
+        }
+    }
+    fn ease_out_expo(self) -> Self {
+        if self == T::one() {
+            T::one()
+        } else {
+            T::from(2.0)
+                .unwrap()
+                .powf(-T::from(10.0).unwrap() * self)
+                .mul_add(-T::one(), T::one())
+        }
+    }
+    fn ease_in_out_expo(self) -> Self {
+        if self == T::zero() {
+            T::zero()
+        } else if self == T::one() {
+            T::one()
+        } else if self < T::from(0.5).unwrap() {
+            T::from(2.0)
+                .unwrap()
+                .powf(
+                    T::from(20.0)
+                        .unwrap()
+                        .mul_add(self, -T::from(10.0).unwrap()),
+                )
+                .mul_add(T::from(0.5).unwrap(), T::zero())
+        } else {
+            T::from(2.0)
+                .unwrap()
+                .powf(
+                    T::from(-20.0)
+                        .unwrap()
+                        .mul_add(self, T::from(10.0).unwrap()),
+                )
+                .mul_add(-T::from(0.5).unwrap(), T::one())
+        }
+    }
+    fn ease_in_elastic(self) -> Self {
+        if self == T::zero() {
+            T::zero()
+        } else if self == T::one() {
+            T::one()
+        } else {
+            let c4 = T::from(2.094_395_2).unwrap();
+            -T::from(2.0)
+                .unwrap()
+                .powf(T::from(10.0).unwrap() * self - T::from(10.0).unwrap())
+                * (self.mul_add(T::from(10.0).unwrap(), -T::from(10.75).unwrap()) * c4).sin()
+        }
+    }
+    fn ease_out_elastic(self) -> Self {
+        if self == T::zero() {
+            T::zero()
+        } else if self == T::one() {
+            T::one()
+        } else {
+            let c4 = T::from(2.094_395_2).unwrap();
+            T::from(2.0)
+                .unwrap()
+                .powf(-T::from(10.0).unwrap() * self)
+                .mul_add(
+                    (self.mul_add(T::from(10.0).unwrap(), -T::from(0.75).unwrap()) * c4).sin(),
+                    T::one(),
+                )
+        }
+    }
+    fn ease_in_out_elastic(self) -> Self {
+        if self == T::zero() {
+            T::zero()
+        } else if self == T::one() {
+            T::one()
+        } else if self < T::from(0.5).unwrap() {
+            let c5 = T::from(1.396_263_4).unwrap();
+            -T::from(2.0)
+                .unwrap()
+                .powf(T::from(20.0).unwrap() * self - T::from(10.0).unwrap())
+                * (self.mul_add(T::from(20.0).unwrap(), -T::from(11.125).unwrap()) * c5).sin()
+                * T::from(0.5).unwrap()
+        } else {
+            let c5 = T::from(1.396_263_4).unwrap();
+            T::from(2.0)
+                .unwrap()
+                .powf(-T::from(20.0).unwrap() * self + T::from(10.0).unwrap())
+                .mul_add(
+                    (self.mul_add(T::from(20.0).unwrap(), -T::from(11.125).unwrap()) * c5).sin()
+                        * T::from(0.5).unwrap(),
+                    T::one(),
+                )
+        }
+    }
+    fn ease_in_out_circ(self) -> Self {
+        let half = T::from(0.5).unwrap();
+        let one = T::one();
+        let two = T::from(2.0).unwrap();
+        let double = self.double();
+        if self < half {
+            (one - (one - double.powi(2)).sqrt()) * half
+        } else {
+            ((one - (two - double).powi(2)).sqrt() + one) * half
+        }
+    }
 
-impl_scalar_easing_helper!(f32);
-impl_scalar_easing_helper!(f64);
+    fn ease_in_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let c = curve.to_curve();
+        if c.abs() < T::from(0.001).unwrap() {
+            self
+        } else {
+            let grow = c.exp();
+            let one = T::one();
+            let a = one / (one - grow);
+            a - (a * grow.powf(self))
+        }
+    }
+
+    fn ease_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let one = T::one();
+        one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
+    }
+
+    fn ease_in_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let half = T::from(0.5).unwrap();
+        if self < half {
+            <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half
+        } else {
+            half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve) * half
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Simd<T, N>
 #[cfg(feature = "nightly")]
-macro_rules! impl_simd_easing_helper {
-    ($t:ty) => {
-        impl<const N: usize> internal::Sealed for Simd<$t, N> where LaneCount<N>: SupportedLaneCount {}
-        impl<const N: usize> EasingArgument for Simd<$t, N> where LaneCount<N>: SupportedLaneCount {}
-        impl<const N: usize> EasingImplHelper for Simd<$t, N>
-        where
-            LaneCount<N>: SupportedLaneCount,
-        {
-            fn from_f32(arg: f32) -> Self {
-                Simd::splat(arg as $t)
-            }
+impl<T, const N: usize> EasingImplHelper for Simd<T, N>
+where
+    T: internal::SimdScalar + core::simd::SimdElement,
+    T::Mask: core::simd::MaskElement,
+    LaneCount<N>: SupportedLaneCount,
+    Simd<T, N>: StdFloat
+        + SimdFloat
+        + SimdPartialEq<Mask = Mask<T::Mask, N>>
+        + SimdPartialOrd
+        + Add<Output = Simd<T, N>>
+        + Sub<Output = Simd<T, N>>
+        + Mul<Output = Simd<T, N>>
+        + Div<Output = Simd<T, N>>
+        + Neg<Output = Simd<T, N>>,
+{
+    fn from_f32(arg: f32) -> Self {
+        Simd::splat(T::from_f32_scalar(arg))
+    }
 
-            fn powi(self, n: i32) -> Self {
-                if (n == 1) {
-                    self
-                }
-                else if (n%2 == 0) {
-                    let tmp = self.powi(n/2);
-                    tmp * tmp
-                }
-                else {
-                    self * self.powi(n-1)
-                }
-            }
+    fn sin(self) -> Self {
+        <Self as StdFloat>::sin(self)
+    }
 
-            fn sin(self) -> Self {
-                <Self as StdFloat>::sin(self)
-            }
+    fn cos(self) -> Self {
+        <Self as StdFloat>::cos(self)
+    }
 
-            fn cos(self) -> Self {
-                <Self as StdFloat>::cos(self)
-            }
-
-            fn powf(self, other: Self) -> Self {
-                <Self as StdFloat>::exp(other * <Self as StdFloat>::ln(self))
-            }
-
-            fn sqrt(self) -> Self {
-                <Self as StdFloat>::sqrt(self)
-            }
-
-            fn exp(self) -> Self {
-                <Self as StdFloat>::exp(self)
-            }
-
-            fn mul_add(self, a: Self, b: Self) -> Self {
-                <Self as StdFloat>::mul_add(self, a, b)
-            }
-
-            fn ease_in_out_quad(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let lower_half = self.powi(2).double();
-                let upper_half = Self::from_f32(1.0) - (self.double() - Self::from_f32(2.0)).powi(2) * half;
-
-                mask.select(lower_half, upper_half)
-            }
-
-            fn ease_in_out_cubic(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let lower_half = {
-                    let cubed = self.powi(3);
-                    let doubled = cubed.double();
-                    doubled + doubled
-                };
-
-                let upper_half = {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(3) * half
-                };
-
-                mask.select(lower_half, upper_half)
-            }
-
-            fn ease_in_out_quart(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let lower_half = {
-                    Self::from_f32(8.0) * self.powi(4)
-                };
-                let upper_half = {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(4) * half
-                };
-                mask.select(lower_half, upper_half)
-            }
-
-            fn ease_in_out_quint(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let lower_half = {
-                    Self::from_f32(16.0) * self.powi(5)
-                };
-                let upper_half = {
-                    let one = Self::from_f32(1.0);
-                    let two = Self::from_f32(2.0);
-                    one - (two - self.double()).powi(5) * half
-                };
-                mask.select(lower_half, upper_half)
-            }
-
-            fn ease_in_out_back(self) -> Self {
-                let c2 = Self::from_f32(1.70158 * 1.525);
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let lower_half = {
-                    let two_x = self.double();
-                    let pow_two_x_2 = two_x.powi(2);
-                    let inner = StdFloat::mul_add(c2 + Self::from_f32(1.0), two_x, -c2);
-                    pow_two_x_2 * inner
-                };
-                let upper_half = {
-                    let two_x_minus_2 = self.double() - Self::from_f32(2.0);
-                    let pow_two_x_minus_2_2 = two_x_minus_2.powi(2);
-                    let inner = StdFloat::mul_add(c2 + Self::from_f32(1.0), self.double() - Self::from_f32(2.0), c2);
-                    StdFloat::mul_add(pow_two_x_minus_2_2, inner, Self::from_f32(2.0))
-                };
-                mask.select(lower_half, upper_half) * half
-            }
-
-            fn ease_out_bounce(self) -> Self {
-                let n1 = Self::from_f32(7.5625);
-                let one_over_d1 = Self::from_f32(1.0 / 2.75);
-                let two_over_d1 = Self::from_f32(2.0 / 2.75);
-                let two_point_five_over_d1 = Self::from_f32(2.5 / 2.75);
-                let mask1 = self.simd_lt(one_over_d1);
-                let mask2 = self.simd_lt(two_over_d1);
-                let mask3 = self.simd_lt(two_point_five_over_d1);
-                let branch1 = n1 * self * self;
-                let adjusted2 = self - Self::from_f32(1.5 / 2.75);
-                let branch2 = StdFloat::mul_add(adjusted2 * adjusted2, n1, Self::from_f32(0.75));
-                let adjusted3 = self - Self::from_f32(2.25 / 2.75);
-                let branch3 = StdFloat::mul_add(adjusted3 * adjusted3, n1, Self::from_f32(0.9375));
-                let adjusted4 = self - Self::from_f32(2.625 / 2.75);
-                let branch4 = StdFloat::mul_add(adjusted4 * adjusted4, n1, Self::from_f32(0.984375));
-                mask1.select(branch1, mask2.select(branch2, mask3.select(branch3, branch4)))
-            }
-
-            fn ease_in_out_bounce(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let one = Self::from_f32(1.0);
-                let mask = self.simd_lt(half);
-                let lower_half = one - EasingArgument::ease_out_bounce(one - self.double());
-                let upper_half = one + EasingArgument::ease_out_bounce(self.double() - one);
-                mask.select(lower_half, upper_half) * half
-            }
-
-            fn ease_in_expo(self) -> Self {
-                let zero = Self::from_f32(0.0);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let ten = Self::from_f32(10.0);
-                let mask_zero = self.simd_eq(zero);
-                let exponent = StdFloat::mul_add(ten, self, -ten);
-                let normal = <Self as StdFloat>::exp(exponent * ln2);
-                mask_zero.select(zero, normal)
-            }
-
-            fn ease_out_expo(self) -> Self {
-                let one = Self::from_f32(1.0);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let neg_ten = Self::from_f32(-10.0);
-                let mask_one = self.simd_eq(one);
-                let exponent = neg_ten * self;
-                let normal = StdFloat::mul_add(<Self as StdFloat>::exp(exponent * ln2), Self::from_f32(-1.0), one);
-                mask_one.select(one, normal)
-            }
-
-            fn ease_in_out_expo(self) -> Self {
-                let zero = Self::from_f32(0.0);
-                let one = Self::from_f32(1.0);
-                let half = Self::from_f32(0.5);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let twenty = Self::from_f32(20.0);
-                let ten = Self::from_f32(10.0);
-                let mask_zero = self.simd_eq(zero);
-                let mask_one = self.simd_eq(one);
-                let mask_half = self.simd_lt(half);
-                let branch_zero = zero;
-                let branch_one = one;
-                let exponent_lower = StdFloat::mul_add(twenty, self, -ten);
-                let branch_lower = <Self as StdFloat>::exp(exponent_lower * ln2) * half;
-                let exponent_upper = StdFloat::mul_add(-twenty, self, ten);
-                let branch_upper = StdFloat::mul_add(<Self as StdFloat>::exp(exponent_upper * ln2), -half, one);
-                let temp = mask_half.select(branch_lower, branch_upper);
-                let temp2 = mask_one.select(branch_one, temp);
-                mask_zero.select(branch_zero, temp2)
-            }
-
-            fn ease_in_elastic(self) -> Self {
-                let zero = Self::from_f32(0.0);
-                let one = Self::from_f32(1.0);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let c4 = Self::from_f32(2.094_395_2);
-                let ten = Self::from_f32(10.0);
-                let ten_point_75 = Self::from_f32(10.75);
-                let mask_zero = self.simd_eq(zero);
-                let mask_one = self.simd_eq(one);
-                let exponent = StdFloat::mul_add(ten, self, -ten);
-                let sin_arg = StdFloat::mul_add(ten, self, -ten_point_75) * c4;
-                let normal = -<Self as StdFloat>::exp(exponent * ln2) * <Self as StdFloat>::sin(sin_arg);
-                let temp = mask_one.select(one, normal);
-                mask_zero.select(zero, temp)
-            }
-
-            fn ease_out_elastic(self) -> Self {
-                let zero = Self::from_f32(0.0);
-                let one = Self::from_f32(1.0);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let c4 = Self::from_f32(2.094_395_2);
-                let ten = Self::from_f32(10.0);
-                let minus_zero_point_75 = Self::from_f32(-0.75);
-                let mask_zero = self.simd_eq(zero);
-                let mask_one = self.simd_eq(one);
-                let exponent = -ten * self;
-                let sin_arg = StdFloat::mul_add(ten, self, minus_zero_point_75) * c4;
-                let normal = StdFloat::mul_add(<Self as StdFloat>::exp(exponent * ln2), <Self as StdFloat>::sin(sin_arg), one);
-                let temp = mask_one.select(one, normal);
-                mask_zero.select(zero, temp)
-            }
-
-            fn ease_in_out_elastic(self) -> Self {
-                let zero = Self::from_f32(0.0);
-                let one = Self::from_f32(1.0);
-                let half = Self::from_f32(0.5);
-                let ln2 = Self::from_f32(2.0f32.ln());
-                let c5 = Self::from_f32(1.396_263_4);
-                let twenty = Self::from_f32(20.0);
-                let ten = Self::from_f32(10.0);
-                let minus_eleven_point_125 = Self::from_f32(-11.125);
-                let mask_zero = self.simd_eq(zero);
-                let mask_one = self.simd_eq(one);
-                let mask_half = self.simd_lt(half);
-                let exponent_lower = StdFloat::mul_add(twenty, self, -ten);
-                let sin_arg_lower = StdFloat::mul_add(twenty, self, minus_eleven_point_125) * c5;
-                let branch_lower = -<Self as StdFloat>::exp(exponent_lower * ln2) * <Self as StdFloat>::sin(sin_arg_lower) * half;
-                let exponent_upper = StdFloat::mul_add(-twenty, self, ten);
-                let sin_arg_upper = StdFloat::mul_add(twenty, self, minus_eleven_point_125) * c5;
-                let branch_upper = StdFloat::mul_add(<Self as StdFloat>::exp(exponent_upper * ln2), <Self as StdFloat>::sin(sin_arg_upper) * half, one);
-                let temp = mask_half.select(branch_lower, branch_upper);
-                let temp2 = mask_one.select(one, temp);
-                mask_zero.select(zero, temp2)
-            }
-
-            fn ease_in_out_circ(self) -> Self {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-
-                let one = Self::from_f32(1.0);
-                let two = Self::from_f32(2.0);
-                let double  = self.double();
-
-                let lower_half = one - StdFloat::sqrt(one - double.powi(2));
-                let upper_half = StdFloat::sqrt(one - (two - double).powi(2)) + one;
-                mask.select(lower_half, upper_half) * half
-            }
-
-            fn ease_in_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let c = curve.to_curve();
-                let abs_curve = SimdFloat::abs(c);
-                let mask = abs_curve.simd_lt(Self::from_f32(0.001));
-                let grow = <Self as StdFloat>::exp(c);
-                let a = Self::from_f32(1.0) / (Self::from_f32(1.0) - grow);
-                let normal = a - (a * grow.powf(self));
-                mask.select(self, normal)
-            }
-
-            fn ease_out_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let one = Self::from_f32(1.0);
-                one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
-            }
-
-            fn ease_in_out_curve<C>(self, curve: C) -> Self
-            where
-                C: internal::CurveParam<Self>,
-            {
-                let half = Self::from_f32(0.5);
-                let mask = self.simd_lt(half);
-                let lower_half = <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half;
-                let upper_half = half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve) * half;
-                mask.select(lower_half, upper_half)
-            }
+    fn powi(self, n: i32) -> Self {
+        if n == 1 {
+            self
+        } else if n % 2 == 0 {
+            let tmp = self.powi(n / 2);
+            tmp * tmp
+        } else {
+            self * self.powi(n - 1)
         }
-    };
+    }
+
+    fn powf(self, other: Self) -> Self {
+        <Self as StdFloat>::exp(other * <Self as StdFloat>::ln(self))
+    }
+
+    fn sqrt(self) -> Self {
+        <Self as StdFloat>::sqrt(self)
+    }
+
+    fn exp(self) -> Self {
+        <Self as StdFloat>::exp(self)
+    }
+
+    fn mul_add(self, a: Self, b: Self) -> Self {
+        <Self as StdFloat>::mul_add(self, a, b)
+    }
+
+    fn ease_in_out_quad(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let lower_half = self.powi(2).double();
+        let upper_half = Self::from_f32(1.0) - (self.double() - Self::from_f32(2.0)).powi(2) * half;
+
+        mask.select(lower_half, upper_half)
+    }
+
+    fn ease_in_out_cubic(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let lower_half = {
+            let cubed = self.powi(3);
+            let doubled = cubed.double();
+            doubled + doubled
+        };
+
+        let upper_half = {
+            let one = Self::from_f32(1.0);
+            let two = Self::from_f32(2.0);
+            one - (two - self.double()).powi(3) * half
+        };
+
+        mask.select(lower_half, upper_half)
+    }
+
+    fn ease_in_out_quart(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let lower_half = { Self::from_f32(8.0) * self.powi(4) };
+        let upper_half = {
+            let one = Self::from_f32(1.0);
+            let two = Self::from_f32(2.0);
+            one - (two - self.double()).powi(4) * half
+        };
+        mask.select(lower_half, upper_half)
+    }
+
+    fn ease_in_out_quint(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let lower_half = { Self::from_f32(16.0) * self.powi(5) };
+        let upper_half = {
+            let one = Self::from_f32(1.0);
+            let two = Self::from_f32(2.0);
+            one - (two - self.double()).powi(5) * half
+        };
+        mask.select(lower_half, upper_half)
+    }
+
+    fn ease_in_out_back(self) -> Self {
+        let c2 = Self::from_f32(1.70158 * 1.525);
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let lower_half = {
+            let two_x = self.double();
+            let pow_two_x_2 = two_x.powi(2);
+            let inner = StdFloat::mul_add(c2 + Self::from_f32(1.0), two_x, -c2);
+            pow_two_x_2 * inner
+        };
+        let upper_half = {
+            let two_x_minus_2 = self.double() - Self::from_f32(2.0);
+            let pow_two_x_minus_2_2 = two_x_minus_2.powi(2);
+            let inner = StdFloat::mul_add(
+                c2 + Self::from_f32(1.0),
+                self.double() - Self::from_f32(2.0),
+                c2,
+            );
+            StdFloat::mul_add(pow_two_x_minus_2_2, inner, Self::from_f32(2.0))
+        };
+        mask.select(lower_half, upper_half) * half
+    }
+
+    fn ease_out_bounce(self) -> Self {
+        let n1 = Self::from_f32(7.5625);
+        let one_over_d1 = Self::from_f32(1.0 / 2.75);
+        let two_over_d1 = Self::from_f32(2.0 / 2.75);
+        let two_point_five_over_d1 = Self::from_f32(2.5 / 2.75);
+        let mask1 = self.simd_lt(one_over_d1);
+        let mask2 = self.simd_lt(two_over_d1);
+        let mask3 = self.simd_lt(two_point_five_over_d1);
+        let branch1 = n1 * self * self;
+        let adjusted2 = self - Self::from_f32(1.5 / 2.75);
+        let branch2 = StdFloat::mul_add(adjusted2 * adjusted2, n1, Self::from_f32(0.75));
+        let adjusted3 = self - Self::from_f32(2.25 / 2.75);
+        let branch3 = StdFloat::mul_add(adjusted3 * adjusted3, n1, Self::from_f32(0.9375));
+        let adjusted4 = self - Self::from_f32(2.625 / 2.75);
+        let branch4 = StdFloat::mul_add(adjusted4 * adjusted4, n1, Self::from_f32(0.984375));
+        mask1.select(
+            branch1,
+            mask2.select(branch2, mask3.select(branch3, branch4)),
+        )
+    }
+
+    fn ease_in_out_bounce(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let one = Self::from_f32(1.0);
+        let mask = self.simd_lt(half);
+        let lower_half = one - EasingArgument::ease_out_bounce(one - self.double());
+        let upper_half = one + EasingArgument::ease_out_bounce(self.double() - one);
+        mask.select(lower_half, upper_half) * half
+    }
+
+    fn ease_in_expo(self) -> Self {
+        let zero = Self::from_f32(0.0);
+        let ln2 = Simd::splat(T::ln_2());
+        let ten = Self::from_f32(10.0);
+        let mask_zero = self.simd_eq(zero);
+        let exponent = StdFloat::mul_add(ten, self, -ten);
+        let normal = <Self as StdFloat>::exp(exponent * ln2);
+        mask_zero.select(zero, normal)
+    }
+
+    fn ease_out_expo(self) -> Self {
+        let one = Self::from_f32(1.0);
+        let ln2 = Simd::splat(T::ln_2());
+        let neg_ten = Self::from_f32(-10.0);
+        let mask_one = self.simd_eq(one);
+        let exponent = neg_ten * self;
+        let normal = StdFloat::mul_add(
+            <Self as StdFloat>::exp(exponent * ln2),
+            -Self::from_f32(1.0),
+            one,
+        );
+        mask_one.select(one, normal)
+    }
+
+    fn ease_in_out_expo(self) -> Self {
+        let zero = Self::from_f32(0.0);
+        let one = Self::from_f32(1.0);
+        let half = Self::from_f32(0.5);
+        let ln2 = Simd::splat(T::ln_2());
+        let twenty = Self::from_f32(20.0);
+        let ten = Self::from_f32(10.0);
+        let mask_zero = self.simd_eq(zero);
+        let mask_one = self.simd_eq(one);
+        let mask_half = self.simd_lt(half);
+        let exponent_lower = StdFloat::mul_add(twenty, self, -ten);
+        let branch_lower = <Self as StdFloat>::exp(exponent_lower * ln2) * half;
+        let exponent_upper = StdFloat::mul_add(-twenty, self, ten);
+        let branch_upper =
+            StdFloat::mul_add(<Self as StdFloat>::exp(exponent_upper * ln2), -half, one);
+        let temp = mask_half.select(branch_lower, branch_upper);
+        let temp2 = mask_one.select(one, temp);
+        mask_zero.select(zero, temp2)
+    }
+
+    fn ease_in_elastic(self) -> Self {
+        let zero = Self::from_f32(0.0);
+        let one = Self::from_f32(1.0);
+        let ln2 = Simd::splat(T::ln_2());
+        let c4 = Self::from_f32(2.094_395_2);
+        let ten = Self::from_f32(10.0);
+        let minus_ten_point_75 = Self::from_f32(-10.75);
+        let mask_zero = self.simd_eq(zero);
+        let mask_one = self.simd_eq(one);
+        let exponent = StdFloat::mul_add(ten, self, -ten);
+        let sin_arg = StdFloat::mul_add(ten, self, minus_ten_point_75) * c4;
+        let normal = -<Self as StdFloat>::exp(exponent * ln2) * <Self as StdFloat>::sin(sin_arg);
+        let temp = mask_one.select(one, normal);
+        mask_zero.select(zero, temp)
+    }
+
+    fn ease_out_elastic(self) -> Self {
+        let zero = Self::from_f32(0.0);
+        let one = Self::from_f32(1.0);
+        let ln2 = Simd::splat(T::ln_2());
+        let c4 = Self::from_f32(2.094_395_2);
+        let ten = Self::from_f32(10.0);
+        let minus_zero_point_75 = Self::from_f32(-0.75);
+        let mask_zero = self.simd_eq(zero);
+        let mask_one = self.simd_eq(one);
+        let exponent = -ten * self;
+        let sin_arg = StdFloat::mul_add(ten, self, minus_zero_point_75) * c4;
+        let normal = StdFloat::mul_add(
+            <Self as StdFloat>::exp(exponent * ln2),
+            <Self as StdFloat>::sin(sin_arg),
+            one,
+        );
+        let temp = mask_one.select(one, normal);
+        mask_zero.select(zero, temp)
+    }
+
+    fn ease_in_out_elastic(self) -> Self {
+        let zero = Self::from_f32(0.0);
+        let one = Self::from_f32(1.0);
+        let half = Self::from_f32(0.5);
+        let ln2 = Simd::splat(T::ln_2());
+        let c5 = Self::from_f32(1.396_263_4);
+        let twenty = Self::from_f32(20.0);
+        let ten = Self::from_f32(10.0);
+        let minus_eleven_point_125 = Self::from_f32(-11.125);
+        let mask_zero = self.simd_eq(zero);
+        let mask_one = self.simd_eq(one);
+        let mask_half = self.simd_lt(half);
+        let exponent_lower = StdFloat::mul_add(twenty, self, -ten);
+        let sin_arg = StdFloat::mul_add(twenty, self, minus_eleven_point_125) * c5;
+        let branch_lower = -<Self as StdFloat>::exp(exponent_lower * ln2)
+            * <Self as StdFloat>::sin(sin_arg)
+            * half;
+        let exponent_upper = StdFloat::mul_add(-twenty, self, ten);
+        let branch_upper = StdFloat::mul_add(
+            <Self as StdFloat>::exp(exponent_upper * ln2),
+            <Self as StdFloat>::sin(sin_arg) * half,
+            one,
+        );
+        let temp = mask_half.select(branch_lower, branch_upper);
+        let temp2 = mask_one.select(one, temp);
+        mask_zero.select(zero, temp2)
+    }
+
+    fn ease_in_out_circ(self) -> Self {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+
+        let one = Self::from_f32(1.0);
+        let two = Self::from_f32(2.0);
+        let double = self.double();
+
+        let lower_half = one - StdFloat::sqrt(one - double.powi(2));
+        let upper_half = StdFloat::sqrt(one - (two - double).powi(2)) + one;
+        mask.select(lower_half, upper_half) * half
+    }
+
+    fn ease_in_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let c = curve.to_curve();
+        let abs_curve = SimdFloat::abs(c);
+        let mask = abs_curve.simd_lt(Self::from_f32(0.001));
+        let grow = <Self as StdFloat>::exp(c);
+        let a = Self::from_f32(1.0) / (Self::from_f32(1.0) - grow);
+        let normal = a - (a * grow.powf(self));
+        mask.select(self, normal)
+    }
+
+    fn ease_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let one = Self::from_f32(1.0);
+        one - <Self as EasingImplHelper>::ease_in_curve(one - self, curve)
+    }
+
+    fn ease_in_out_curve<C>(self, curve: C) -> Self
+    where
+        C: internal::CurveParam<Self>,
+    {
+        let half = Self::from_f32(0.5);
+        let mask = self.simd_lt(half);
+        let lower_half = <Self as EasingImplHelper>::ease_in_curve(self.double(), curve) * half;
+        let upper_half =
+            half + <Self as EasingImplHelper>::ease_out_curve((self - half).double(), curve) * half;
+        mask.select(lower_half, upper_half)
+    }
 }
 
-#[cfg(feature = "nightly")]
-impl_simd_easing_helper!(f32);
-#[cfg(feature = "nightly")]
-impl_simd_easing_helper!(f64);
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 #[cfg(test)]
 mod tests {
@@ -1496,7 +1565,7 @@ mod reference_value_tests {
     );
     generate_reference_tests!(
         ease_out_back,
-        [0.705802, 1.029027, 1.087698, 1.099352, 1.046450]
+        [0.705802, 1.029027, 1.087698, 1.099352, 1.046_45]
     );
     generate_reference_tests!(
         ease_in_out_back,
@@ -1532,7 +1601,7 @@ mod reference_value_tests {
     );
     generate_reference_tests!(
         ease_out_elastic,
-        [1.125000, 1.031250, 1.015625, 0.984375, 1.001953]
+        [1.125, 1.031_25, 1.015625, 0.984375, 1.001953]
     );
     generate_reference_tests!(
         ease_in_out_elastic,

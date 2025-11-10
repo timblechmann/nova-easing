@@ -15,7 +15,7 @@ repos:
     args: [--all-targets]
   - id: fmt
   - id: clippy
-    args: [--all-targets, --tests]
+    args: [--all-targets, --tests, --, -D, warnings]
 
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
   rev: v2.14.0

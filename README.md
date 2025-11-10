@@ -92,7 +92,8 @@ gains when processing multiple values simultaneously.
 ## Building the Demo
 
 The included demo binary generates visual plots for all easing functions. To build
-and run it, you will need a nightly Rust toolchain and enable the `nightly` and `demo` features:
+and run it, you will need a nightly Rust toolchain and enable the `nightly` and
+`demo` features:
 
 ```bash
 rustup default nightly
@@ -102,7 +103,8 @@ cargo run --bin demo --features nightly,demo
 This will create PNG plots in the `demo_plots/` directory, with subdirectories for
 `f32` and `f32x4` variants.
 
-Note: The `demo` feature is optional and includes the `plotters` dependency for generating plots. It is not required for using the easing functions.
+Note: The `demo` feature is optional and includes the `plotters` dependency
+for generating plots. It is not required for using the easing functions.
 
 ## Running Benchmarks
 
