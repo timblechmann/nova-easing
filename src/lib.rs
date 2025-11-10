@@ -1373,3 +1373,170 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod reference_value_tests {
+    use super::EasingArgument;
+    use approx::assert_relative_eq;
+
+    macro_rules! generate_reference_tests {
+        ($func:ident, $vals:expr) => {
+            #[test]
+            fn $func() {
+                let inputs = [0.2f32, 0.4, 0.5, 0.6, 0.8];
+                #[allow(clippy::approx_constant)]
+                let expected = $vals;
+                for (&input, &exp) in inputs.iter().zip(expected.iter()) {
+                    assert_relative_eq!(input.$func(), exp, epsilon = 1e-6);
+                }
+            }
+        };
+        ($func:ident, $param:expr, $vals:expr) => {
+            #[test]
+            fn $func() {
+                let inputs = [0.2f32, 0.4, 0.5, 0.6, 0.8];
+                #[allow(clippy::approx_constant)]
+                let expected = $vals;
+                for (&input, &exp) in inputs.iter().zip(expected.iter()) {
+                    assert_relative_eq!(input.$func($param), exp, epsilon = 1e-6);
+                }
+            }
+        };
+    }
+
+    generate_reference_tests!(
+        ease_in_quad,
+        [0.040000, 0.160000, 0.250000, 0.360000, 0.640000]
+    );
+    generate_reference_tests!(
+        ease_out_quad,
+        [0.360000, 0.640000, 0.750000, 0.840000, 0.960000]
+    );
+    generate_reference_tests!(
+        ease_in_out_quad,
+        [0.080000, 0.320000, 0.500000, 0.680000, 0.920000]
+    );
+    generate_reference_tests!(
+        ease_in_cubic,
+        [0.008000, 0.064000, 0.125000, 0.216000, 0.512000]
+    );
+    generate_reference_tests!(
+        ease_out_cubic,
+        [0.488000, 0.784000, 0.875000, 0.936000, 0.992000]
+    );
+    generate_reference_tests!(
+        ease_in_out_cubic,
+        [0.032000, 0.256000, 0.500000, 0.744000, 0.968000]
+    );
+    generate_reference_tests!(
+        ease_in_quart,
+        [0.001600, 0.025600, 0.062500, 0.129600, 0.409600]
+    );
+    generate_reference_tests!(
+        ease_out_quart,
+        [0.590400, 0.870400, 0.937500, 0.974400, 0.998400]
+    );
+    generate_reference_tests!(
+        ease_in_out_quart,
+        [0.012800, 0.204800, 0.500000, 0.795200, 0.987200]
+    );
+    generate_reference_tests!(
+        ease_in_quint,
+        [0.000320, 0.010240, 0.031250, 0.077760, 0.327680]
+    );
+    generate_reference_tests!(
+        ease_out_quint,
+        [0.672320, 0.922240, 0.968750, 0.989760, 0.999680]
+    );
+    generate_reference_tests!(
+        ease_in_out_quint,
+        [0.005120, 0.163840, 0.500000, 0.836160, 0.994880]
+    );
+    generate_reference_tests!(
+        ease_in_sine,
+        [0.048943, 0.190983, 0.292893, 0.412215, 0.690983]
+    );
+    generate_reference_tests!(
+        ease_out_sine,
+        [0.309017, 0.587785, 0.707107, 0.809017, 0.951057]
+    );
+    generate_reference_tests!(
+        ease_in_out_sine,
+        [0.095491, 0.345492, 0.500000, 0.654509, 0.904509]
+    );
+    generate_reference_tests!(
+        ease_in_circ,
+        [0.020204, 0.083485, 0.133975, 0.200000, 0.400000]
+    );
+    generate_reference_tests!(
+        ease_out_circ,
+        [0.600000, 0.800000, 0.866025, 0.916515, 0.979796]
+    );
+    generate_reference_tests!(
+        ease_in_out_circ,
+        [0.041742, 0.200000, 0.500000, 0.800000, 0.958258]
+    );
+    generate_reference_tests!(
+        ease_in_back,
+        [-0.046451, -0.099352, -0.087698, -0.029028, 0.294198]
+    );
+    generate_reference_tests!(
+        ease_out_back,
+        [0.705802, 1.029027, 1.087698, 1.099352, 1.046450]
+    );
+    generate_reference_tests!(
+        ease_in_out_back,
+        [-0.092556, 0.089926, 0.500000, 0.910074, 1.092556]
+    );
+    generate_reference_tests!(
+        ease_in_bounce,
+        [0.060000, 0.227500, 0.234375, 0.090000, 0.697500]
+    );
+    generate_reference_tests!(
+        ease_out_bounce,
+        [0.302500, 0.910000, 0.765625, 0.772500, 0.940000]
+    );
+    generate_reference_tests!(
+        ease_in_out_bounce,
+        [0.113750, 0.348750, 0.500000, 0.651250, 0.886250]
+    );
+    generate_reference_tests!(
+        ease_in_expo,
+        [0.003906, 0.015625, 0.031250, 0.062500, 0.250000]
+    );
+    generate_reference_tests!(
+        ease_out_expo,
+        [0.750000, 0.937500, 0.968750, 0.984375, 0.996094]
+    );
+    generate_reference_tests!(
+        ease_in_out_expo,
+        [0.007812, 0.125000, 0.500000, 0.875000, 0.992188]
+    );
+    generate_reference_tests!(
+        ease_in_elastic,
+        [-0.001953, 0.015625, -0.015625, -0.031250, -0.125000]
+    );
+    generate_reference_tests!(
+        ease_out_elastic,
+        [1.125000, 1.031250, 1.015625, 0.984375, 1.001953]
+    );
+    generate_reference_tests!(
+        ease_in_out_elastic,
+        [-0.003906, -0.117462, 0.500000, 1.117462, 1.003906]
+    );
+    generate_reference_tests!(
+        ease_in_curve,
+        1.0,
+        [0.128851, 0.286231, 0.377541, 0.478454, 0.713236]
+    );
+    generate_reference_tests!(
+        ease_out_curve,
+        1.0,
+        [0.286764, 0.521546, 0.622459, 0.713769, 0.871149]
+    );
+    generate_reference_tests!(
+        ease_in_out_curve,
+        1.0,
+        [0.143115, 0.356618, 0.500000, 0.643382, 0.856885]
+    );
+}
